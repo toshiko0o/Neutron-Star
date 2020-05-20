@@ -32,8 +32,8 @@ cdef double n0 = 0.155e45
 ####### Taylor Coefficients #######
 
 cdef double E_sat = -15.9 * MeV_J
-cdef double E_sym = 31.6 * MeV_J
-cdef double K_sat = 230 * MeV_J
+cdef double E_sym = 31.7 * MeV_J
+cdef double K_sat = 240 * MeV_J
 cdef double L_sym = 58.9 * MeV_J
 
 cdef double Q_sat = 0 * MeV_J
@@ -66,15 +66,14 @@ mass_control_indicator = True
 
 p_for_coreEOS = []
 rho_for_coreEOS = []
-First_Round_data = []
-# PR_data = []
 
 ####### Filename #######
 
 file_name = 'default'
 EOSfile = 'default'
 Odata_name = 'default'
-# PRs_file = 'default'
+Idata_name = 'default'
+trans_data_name = 'default'
 
 
 
@@ -478,9 +477,9 @@ cdef double tidal(double r, double m, double y):
     cdef double C, k2, lam
 
     C = G * m / (r * c_light**2)
-    k2 = 8/5 * C**5 * (1 - 2 * C)**2 * (2 + 2 * C * (y - 1) - y) * (2 * C * (6 - 3 * y + 3 * C * (5 * y - 8)) \
+    k2 = 8/5 * C**5 * (1 - 2 * C)**2 * (2 + 2 * C * (y - 1) - y) / (2 * C * (6 - 3 * y + 3 * C * (5 * y - 8)) \
                                            + 4 * C**3 * (13 - 11 * y + C * (3 * y - 2) + 2 * C**2 * (1 + y)) \
-                                           + 3 * (1 - 2 * C)**2 * (2 - y + 2 * C * (y - 1)) * np.log(1 - 2 * C)) ** (-1)
+                                           + 3 * (1 - 2 * C)**2 * (2 - y + 2 * C * (y - 1)) * np.log(1 - 2 * C))
     lam = 2/3 * k2 * C**(-5)
     return lam
 
@@ -511,7 +510,7 @@ cdef double RK4_cal(double h):
     y_3 = Y(m_0 + 0.5 * h * m_2, ro, p_0 + 0.5 * h * p_2, y_0 + 0.5 * h * y_2, r_0 + 0.5 * h)
 
     # Flow Control 1
-    if p_0 + 0.5 * h * p_1 <= 10 or p_0 + 0.5 * h * p_2 <= 10 or p_0 + h * p_3 <= 10:
+    if p_0 + 0.5 * h * p_1 <= 1 or p_0 + 0.5 * h * p_2 <= 1 or p_0 + h * p_3 <= 1:
         cycle_control_indicator = False
 
     # Calculate k4
@@ -533,7 +532,7 @@ cdef double RK4_cal(double h):
     r_0 = r_0 + h
 
     # Flow Control 2
-    if p_0 <= 10: 
+    if p_0 <= 1: 
         cycle_control_indicator = False
 
     # Sound Speed control
@@ -552,7 +551,8 @@ cdef double RK4_cal(double h):
 
 cpdef double RK4loop(p):
 
-    global m_0, p_0, r_0, y_0, radius_control_indicator, cycle_control_indicator, vs_control_indicator
+    global m_0, p_0, r_0, y_0, \
+    radius_control_indicator, cycle_control_indicator, vs_control_indicator, mass_control_indicator
 
     # Initial Conditions
     m_0 = 0.0
@@ -566,15 +566,19 @@ cpdef double RK4loop(p):
     mass_control_indicator = True
 
     # Step Length
-    cdef double h = 10.0
+    cdef double h1 = 10.0
+    cdef double h2 = 1.0
 
     # Singular Point
-    RK4_cal(h)
+    RK4_cal(h1)
 
     r_0 = r_0 - 0.0001
 
     while cycle_control_indicator:
-        RK4_cal(h)
+        if p_0 >= 5e31:
+            RK4_cal(h1)
+        else:
+            RK4_cal(h2)
 
         if r_0 > 18000:
             radius_control_indicator = False
@@ -595,13 +599,13 @@ def f_14(p):   # used in fsolve for the data at 1.4 Msun
     return m - 1.4
 
 
-def f_19(p):   # used in fsolve for the data at 1.4 Msun
+def f_197(p):   # used in fsolve for the data at 1.4 Msun
 
     RK4loop(p)
 
     m = m_0/m_sun
 
-    return m - 1.9
+    return m - 1.97
 
 
 def get_m14_data():
@@ -613,9 +617,9 @@ def get_m14_data():
     return output
 
 
-def get_m19_data():
+def get_m197_data():
 
-    fsolve(f_19, 0.04, maxfev=20, xtol=1e-3)
+    fsolve(f_197, 0.04, maxfev=15, xtol=1e-3)
 
     output = [m_0/m_sun, r_0/1000, tidal(r_0, m_0, y_0)]
 
@@ -638,35 +642,35 @@ def select_1st():
 
     count = 0
     t_count = 0
-    alldata = 31*21*25*40
+    alldata = 19*25*44
 
     with open(file_name, 'a') as f:
         f.write('[')
 
-    for i in range(31):
-        Q_sat = (-400 + 40 * i) * MeV_J
-        for j in range(21):
-            K_sym = (-400 + 25 * j) * MeV_J
-            for k in range(26):
-                Q_sym = (-200 + 40 * k) * MeV_J
+    for i in range(19):
+        Q_sat = (-130 + 5 * i) * MeV_J
+        for j in range(25):
+            K_sym = (-120 + 5 * j) * MeV_J
+            for k in range(44):
+                Q_sym = (70 + 10 * k) * MeV_J
 
-                x = np.linspace(-1/3, 3, 5000)
-                esym_value = np.zeros(5000)
+                x = np.linspace(-1/3, 3, 3000)
+                esym_value = np.zeros(3000)
 
-                for ii in range(5000):
+                for ii in range(3000):
                     esym_value[ii] = esym(x[ii])
 
                 t_count += 1
 
                 if all(esym_value > 0):
-                    output = [-400 + 40 * i, -400 + 40 * j, -200 + 40 * k]
+                    output = [-130 + 5 * i, -120 + 5 * j, 70 + 10 * k]
                     with open(file_name, 'a') as f:
                         f.write(str(output))  # Save data
                         f.write(',')
 
                     count += 1                
 
-                print(count, '/', t_count, '/', alldata)
+                print('{0}/{1} checked, {2} added'.format(t_count, alldata, count))
 
     with open(file_name, 'a') as f:
         f.write(']')
@@ -734,9 +738,6 @@ def select_3rd():
     with open(file_name, 'a') as f:
         f.write('[')
 
-    with open(Odata_name, 'a') as f:
-        f.write('[')
-
     count = 0
     t_count = 0
     alldata = np.shape(data)[0]
@@ -755,18 +756,12 @@ def select_3rd():
 
         t_count += 1
 
-        if vs_control_indicator == True: 
+        if vs_control_indicator == True and mass_control_indicator == True:
 
             count += 1
 
-            output = [m_0/m_sun, r_0/1000, tidal(r_0, m_0, y_0)]
-
             with open(file_name, 'a') as f:
                 f.write(str(i))
-                f.write(',')
-
-            with open(Odata_name, 'a') as f:
-                f.write(str(output))
                 f.write(',')
 
         print('{0}/{1} checked, {2} added'.format(t_count, alldata, count))
@@ -774,12 +769,8 @@ def select_3rd():
     with open(file_name, 'a') as f:
         f.write(']')
 
-    with open(Odata_name, 'a') as f:
-        f.write(']')
-
 
 # 4th round selection by the condition of tidal deformability at 1.4Msun
-# under construction not finished
 def select_4th():
 
     global Q_sat, K_sym, Q_sym
@@ -810,6 +801,8 @@ def select_4th():
 
         output = get_m14_data()
 
+        print(output)
+
         t_count += 1
 
         if vs_control_indicator == True and mass_control_indicator == True: 
@@ -835,221 +828,144 @@ def select_4th():
         f.write(']')
 
 
-'''
-无视这部分
+# 5th round selection by the condition of supporting max mass at least 1.97Msun
+# compute the NS observable at 1.97Msun
+def select_5th():
 
-def run():
-
-    global Q_sat, K_sym, Q_sym, cross_point, lam_0, FR_data, PR_data, 
+    global Q_sat, K_sym, Q_sym
 
     with open(EOSfile, 'r') as f:
         raw = f.read()
         data = eval(raw)
 
+    with open(Idata_name, 'r') as f:
+        raw = f.read()
+        data14 = eval(raw)
 
-    Consss = 0
-    modelcount = 0
+    with open(file_name, 'a') as f:
+        f.write('[')
 
-    with open(PRs_file, 'a') as f:
-        f.write('{')
+    with open(Odata_name, 'a') as f:
+        f.write('[')
 
-    with open(FRs_file, 'a') as f:
-        f.write('{')
+    with open(trans_data_name, 'a') as f:
+        f.write('[')   
 
-    for i in Para:
-        print('\n--------------------------------The {0}st model---------------------------------\n'.format(Consss+1))
+    count = 0
+    t_count = 0
+    alldata = np.shape(data)[0]
 
-        CID_k = True
+    for i in data:
 
         Q_sat = i[0] * MeV_J
         K_sym = i[1] * MeV_J
         Q_sym = i[2] * MeV_J
 
+        #initialize point set for interpolation
 
-        m14control = True
-        # m197_control = False
-        vs_control_indicator = True
-        save_control = False
+        __initialization__()
+
+        output = get_m197_data()
+
+        print(output)
+
+        t_count += 1
+
+        if vs_control_indicator == True and mass_control_indicator == True: 
+
+            count += 1
+
+            with open(file_name, 'a') as f:
+                f.write(str(i))
+                f.write(',')
+
+            with open(Odata_name, 'a') as f:
+                f.write(str(output))
+                f.write(',')
+
+            with open(trans_data_name, 'a') as f:
+                f.write(str(data14[t_count-1]))
+                f.write(',')
+
+        print('{0}/{1} checked, {2} added'.format(t_count, alldata, count))
+
+    with open(file_name, 'a') as f:
+        f.write(']')
+
+    with open(Odata_name, 'a') as f:
+        f.write(']')
+
+    with open(trans_data_name, 'a') as f:
+        f.write(']')
+
+
+def figure_paint():
+
+    global Q_sat, K_sym, Q_sym
+
+    with open(EOSfile, 'r') as f:
+        raw = f.read()
+        data = eval(raw)
+
+    with open(file_name, 'a') as f:
+        f.write('[')
+
+        count = 0
+
+    for i in data:
+
+        Q_sat = i[0] * MeV_J
+        K_sym = i[1] * MeV_J
+        Q_sym = i[2] * MeV_J
 
         temp_data = []
 
-        for j in range(4):
+        count += 1
 
-            m14_step_control = False
+        #initialize point set for interpolation
 
-            if CID_k == False:
+        __initialization__()
+        
+        for j in range(55):
+
+            if j <= 8: 
+                p_temp = 0.001 * j + 0.002
+            elif j <= 23:
+                p_temp = 0.004 * j - 0.022
+            elif j <= 33:
+                p_temp = 0.008 * j - 0.106
+            else:
+                p_temp = 0.012 * j - 0.158
+
+            RK4loop(p_temp)
+
+            output = [m_0/m_sun, r_0/1000, tidal(r_0, m_0, y_0)]
+            print(output)
+
+            if vs_control_indicator == False or mass_control_indicator == False:
+                print('{} model finished. \n'.format(count))
                 break
 
-            step = 0.01*10**j
+            if output[0] < 0.7:
+                print('P = {}e0 counted'.format(p_temp))
+                continue
 
-            for k in range(10):
+            if radius_control_indicator == True and output[0] >= 0.7:
+                print('P = {}e0 counted'.format(p_temp))
+                temp_data.append(output)
 
-                if m14_step_control == True:
-                    m14_step_control = False
-                    continue
+        with open(file_name, 'a') as f:
+            f.write(str(temp_data))
 
-                radius_control = True
-                control_indicator = True
+        if count < np.shape(data)[0]:
+            with open(file_name, 'a') as f:
+                f.write(',')
 
-                # print(cross_point)
-
-                RK4loop(0.01 + step * k)
-
-                if vs_control_indicator == False:
-                    Consss += 1
-                    print('Breakpoint pressure: ', p_0, p_0/e0)
-                    print('One model checked!', Consss, 'done. ')
-                    print('*****************************************')
-
-                    CID_k = False
-                    break
-
-                elif radius_control == False:
-                    print('*****************************************')
-                    print('Radius is too large! ')
-                    print('*****************************************')
-                    continue
-
-                else:
-                    rout = r_0/1000
-                    mout = m_0/m_sun
-                    lam_0 = tidal(r_0, m_0, y_0)
-
-                    PRout = [rout, mout, lam_0]
-                    print('*****************************************')
-                    print('Got an output: ')
-                    print(PRout)
-
-                    if m14control == True: 
-                        print('1.4Msun test. ')
-                        if mout > 1.1:
-                            tempstep = 0.001
-                            while mout < 1.4:
-                                control_indicator = True
-
-                                print('round{0}'.format(tempstep * 500 + 0.5))
-
-                                RK4loop(0.01 + step * k + tempstep)
-
-                                if vs_control_indicator == False:
-                                    break
-
-                                mout = m_0/m_sun
-                                print('round{0} mout: '.format(tempstep * 500 + 0.5), mout)
-                                tempstep += 0.002
-
-                                if tempstep > 0.011:
-                                    m14_step_control = True
-                                    break
-
-                            if m14_step_control == True:
-                                continue
-                            
-                            if vs_control_indicator == False:
-                                Consss += 1
-                                print('Breakpoint pressure: ', p_0, p_0/e0)
-                                print('One model checked!', Consss, 'done. ')
-                                print('*****************************************')
-                                CID_k = False
-                                break
-
-                            rout = r_0/1000
-                            lam_0 = tidal(r_0, m_0, y_0)
-
-                            PRout = [rout, mout, lam_0]
-                            print('*****************************************')
-                            print('Data at 1.4 Msun: ')
-                            print(PRout)
-                            print('*****************************************')
-    
-                            if lam_0 > 580 or lam_0 < 70: 
-                                print('Lambda at 1.4Msun does not fit! ')
-                                print('*****************************************')
-                                
-                                Consss += 1
-                                print('One model checked!', Consss, 'done. ')
-                                print('*****************************************')
-
-                                CID_k = False
-                                break
-                            else:
-                                # m197_control = True
-                                m14control = False
-                                m14_step_control = True
-                                temp_data.append(PRout)
-                                print('Test of Lambda at 1.4Msun passed. ')
-                                print('*****************************************')
-                                continue
-                            
-                        else:
-                            continue
-
-                    # if m197_control == True: 
-                    if mout >= 1.97:
-                        save_control = True
-                        modelcount += 1
-                        temp_data.append(PRout)
-                        print('*****************************************')
-                        print('Test of 1.97Msun passed. ')                       
-                        print('*****************************************')
-
-                        Consss += 1
-                        print('One model checked!', Consss, 'done. ')
-                        print('*****************************************')
-
-                        CID_k = False
-                        break
-
-                        # m197_control = False
-
-                        # output = [i[0], i[1], i[2]]
-                        # PR_data.append(temp_data)
-                        
-                        # FR_data.append(output)
-
-                        # Consss += 1
-                        # CID_k = False
-
-
-            if j + k == 12:
-                Consss += 1
-                print('*****************************************')
-                print('One model checked!', Consss, 'done. ')
-                print('*****************************************')
-                # m197_control = False
-
-        if save_control == True:
-            output = [i[0], i[1], i[2]]
-
-            PRstr = '{0}: {1}'.format(modelcount, temp_data)
-            FRstr = '{0}: {1}'.format(modelcount,output)
-
-            with open(PRs_file, 'a') as f:
-                f.write(PRstr)
-                f.write(', ')
-            with open(FRs_file, 'a') as f:
-                f.write(FRstr)
-                f.write(', ')
-
-            print('***************** Bingo!', modelcount, 'sets added! *****************')
-
-
-            # PR_data.append(temp_data)
-            # FR_data.append(output) 
-
-            # np.savetxt(PRs_file, PR_data)
-            # np.savetxt(FRs_file, FR_data)
-
-    with open(PRs_file, 'a') as f:
-        f.write('}')
-
-    with open(FRs_file, 'a') as f:
-        f.write('}')
+    with open(file_name, 'a') as f:
+        f.write(']')
 
 
 
-
-'''
 
 
 ############################################### Value setting and getting ###########################################
@@ -1069,6 +985,16 @@ def set_Odata_name(input):
     Odata_name = input
 
 
+def set_Idata_name(input):
+    global Idata_name
+    Idata_name = input    
+
+
+def set_trans_data_name(input):
+    global trans_data_name
+    trans_data_name = input 
+
+
 def set_Q_sat(input):
     global Q_sat
     Q_sat = input * MeV_J
@@ -1084,15 +1010,7 @@ def set_Q_sym(input):
     Q_sym = input * MeV_J
 
 
-
-
 def get_cross_point():
     return cross_point
-
-
-
-
-
-
 
 
