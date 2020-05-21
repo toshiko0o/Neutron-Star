@@ -923,7 +923,6 @@ def figure_paint():
         count += 1
 
         #initialize point set for interpolation
-
         __initialization__()
         
         for j in range(55):
@@ -937,13 +936,21 @@ def figure_paint():
             else:
                 p_temp = 0.012 * j - 0.158
 
+            # Initial condition test
+            if p_temp*e0 > np.max(p_for_coreEOS):
+                print('*****************************************')
+                print('         pressure too large! \n')
+                print('         {} model finished. \n'.format(count))
+                break
+
             RK4loop(p_temp)
 
             output = [m_0/m_sun, r_0/1000, tidal(r_0, m_0, y_0)]
             print(output)
 
             if vs_control_indicator == False or mass_control_indicator == False:
-                print('{} model finished. \n'.format(count))
+                print('*****************************************')
+                print('         {} model finished. \n'.format(count))
                 break
 
             if output[0] < 0.7:
@@ -953,6 +960,10 @@ def figure_paint():
             if radius_control_indicator == True and output[0] >= 0.7:
                 print('P = {}e0 counted'.format(p_temp))
                 temp_data.append(output)
+
+            if j == 54:
+                print('*****************************************')
+                print('         {} model finished. \n'.format(count))
 
         with open(file_name, 'a') as f:
             f.write(str(temp_data))
